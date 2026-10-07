@@ -152,6 +152,9 @@ jobs:
           sed -i "s|YOUR_GITHUB_USER|${{ vars.DOCKERHUB_USERNAME }}|g" argocd/application.yaml argocd/project.yaml
           sed -i "s|DOCKERHUB_USER|${{ vars.DOCKERHUB_USERNAME }}|g" k8s/overlays/dev/kustomization.yaml
 
+          # Apply k8s manifests directly so namespace taskflow and deployments exist immediately
+          kubectl apply -k k8s/overlays/dev
+
           kubectl apply -f argocd/project.yaml
           kubectl apply -f argocd/application.yaml
 
@@ -179,8 +182,8 @@ jobs:
 
       - name: Wait for TaskFlow to be healthy
         run: |
-          kubectl wait --for=condition=available --timeout=180s deployment/taskflow-backend -n taskflow || true
-          kubectl wait --for=condition=available --timeout=180s deployment/taskflow-frontend -n taskflow || true
+          kubectl wait --for=condition=available --timeout=300s deployment/taskflow-backend -n taskflow
+          kubectl wait --for=condition=available --timeout=300s deployment/taskflow-frontend -n taskflow
           kubectl get pods -n taskflow
           kubectl get svc -n taskflow
 
