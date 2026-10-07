@@ -45,7 +45,9 @@ export default function App() {
     <div className="container">
       <header>
         <h1>📋 TaskFlow</h1>
-        <p className="subtitle">A MERN stack demo for CI/CD testing</p>
+        <p className="subtitle">
+          A MERN stack demo for CI/CD testing by Ayesha Azad
+        </p>
       </header>
 
       <form onSubmit={add} className="add-form">
