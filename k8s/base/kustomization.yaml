@@ -13,7 +13,7 @@ resources:
   - backend-service.yaml
   - frontend-deployment.yaml
   - frontend-service.yaml
-  - servicemonitor.yaml
+  - service-monitor.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: taskflow

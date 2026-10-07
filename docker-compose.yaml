@@ -3,6 +3,7 @@ version: "3.9"
 services:
   mongodb:
     image: mongo:7.0
+    container_name: taskflow-mongodb
     ports:
       - "27017:27017"
     environment:
@@ -10,9 +11,14 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: changeMeInProd123
     volumes:
       - mongo-data:/data/db
+    networks:
+      taskflow-net:
+        aliases:
+          - mongodb
 
   backend:
     build: ./backend
+    container_name: taskflow-backend
     ports:
       - "5000:5000"
     environment:
@@ -20,13 +26,26 @@ services:
       MONGO_URI: mongodb://admin:changeMeInProd123@mongodb:27017/taskflow?authSource=admin
     depends_on:
       - mongodb
+    networks:
+      taskflow-net:
+        aliases:
+          - taskflow-backend
+          - backend
 
   frontend:
     build: ./frontend
+    container_name: taskflow-frontend
     ports:
       - "3000:80"
     depends_on:
       - backend
+    networks:
+      taskflow-net:
+
+networks:
+  taskflow-net:
+    driver: bridge
 
 volumes:
   mongo-data:
+

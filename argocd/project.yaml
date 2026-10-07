@@ -6,7 +6,7 @@ metadata:
 spec:
   description: TaskFlow MERN project
   sourceRepos:
-    - "https://github.com/YOUR_GITHUB_USER/taskflow.git"
+    - "*"
   destinations:
     - namespace: taskflow
       server: https://kubernetes.default.svc
