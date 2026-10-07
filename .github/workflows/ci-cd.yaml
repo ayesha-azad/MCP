@@ -136,7 +136,7 @@ jobs:
       - name: Install ArgoCD
         run: |
           kubectl create namespace argocd
-          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+          kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
           kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
 
       - name: Install ArgoCD CLI
@@ -150,6 +150,7 @@ jobs:
           # Patch the Application manifest with this repo URL and image tags
           sed -i "s|YOUR_GITHUB_USER/taskflow|${{ github.repository }}|g" argocd/application.yaml
           sed -i "s|YOUR_GITHUB_USER|${{ vars.DOCKERHUB_USERNAME }}|g" argocd/application.yaml argocd/project.yaml
+          sed -i "s|DOCKERHUB_USER|${{ vars.DOCKERHUB_USERNAME }}|g" k8s/overlays/dev/kustomization.yaml
 
           kubectl apply -f argocd/project.yaml
           kubectl apply -f argocd/application.yaml
