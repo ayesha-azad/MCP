@@ -85,7 +85,7 @@ export default function App() {
           Backend: <code>/api/tasks</code>
         </span>
         <span>
-          Version: <code>1.0.0</code>
+          Version: <code>1.0.1</code>
         </span>
       </footer>
     </div>
