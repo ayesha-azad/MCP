@@ -12,7 +12,9 @@ import urllib.parse
 import urllib.error
 import subprocess
 
-BACKEND_URL = "http://localhost:5000"
+import os
+
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5001")
 
 def call_backend(endpoint, method="GET", data=None):
     url = f"{BACKEND_URL}{endpoint}"

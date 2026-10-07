@@ -29,9 +29,9 @@ docker compose up -d
 
 Access the services:
 - **Frontend App**: [http://localhost:3000](http://localhost:3000)
-- **Backend API**: [http://localhost:5000](http://localhost:5000)
-- **API Health Check**: [http://localhost:5000/health](http://localhost:5000/health)
-- **Prometheus Metrics**: [http://localhost:5000/metrics](http://localhost:5000/metrics)
+- **Backend API**: [http://localhost:5001](http://localhost:5001)
+- **API Health Check**: [http://localhost:5001/health](http://localhost:5001/health)
+- **Prometheus Metrics**: [http://localhost:5001/metrics](http://localhost:5001/metrics)
 
 ---
 
