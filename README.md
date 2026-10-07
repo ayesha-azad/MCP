@@ -1,6 +1,7 @@
 # 🚀 TaskFlow & MCP Server
 
 TaskFlow is a modern MERN stack application (MongoDB, Express, React, Node.js) equipped with DevOps infrastructure, GitOps continuous delivery with ArgoCD, Kubernetes manifests (Kustomize), Prometheus monitoring, GitHub Actions CI/CD, and a Python Model Context Protocol (MCP) server.
+It is used for testing MCP.
 
 ---
 
@@ -28,6 +29,7 @@ docker compose up -d
 ```
 
 Access the services:
+
 - **Frontend App**: [http://localhost:3000](http://localhost:3000)
 - **Backend API**: [http://localhost:5001](http://localhost:5001)
 - **API Health Check**: [http://localhost:5001/health](http://localhost:5001/health)
@@ -38,11 +40,13 @@ Access the services:
 ### Option 2: Run Services Manually (Dev Mode)
 
 1. **Start MongoDB**:
+
    ```bash
    docker run -d --name taskflow-mongo -p 27017:27017 mongo:7.0
    ```
 
 2. **Start Backend**:
+
    ```bash
    cd backend
    npm install
@@ -63,6 +67,7 @@ Access the services:
 The repository includes `mcp-server.py`, an MCP STDIO server that allows AI assistants (such as Claude Desktop or Antigravity) to manage tasks and inspect system health.
 
 ### Available Tools:
+
 - `list_tasks`: Retrieves all tasks
 - `create_task`: Creates a task (`title`, `description`)
 - `update_task`: Updates task state (`task_id`, `completed`, `title`)
@@ -72,6 +77,7 @@ The repository includes `mcp-server.py`, an MCP STDIO server that allows AI assi
 - `k8s_status`: Checks Kubernetes pod status in `taskflow` namespace
 
 ### Run directly:
+
 ```bash
 python3 mcp-server.py
 ```
@@ -102,6 +108,7 @@ kubectl apply -k k8s/overlays/dev
 ```
 
 Deploy with ArgoCD:
+
 ```bash
 kubectl apply -f argocd/project.yaml
 kubectl apply -f argocd/application.yaml
