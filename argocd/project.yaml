@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: taskflow
+  namespace: argocd
+spec:
+  description: TaskFlow MERN project
+  sourceRepos:
+    - "https://github.com/YOUR_GITHUB_USER/taskflow.git"
+  destinations:
+    - namespace: taskflow
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
