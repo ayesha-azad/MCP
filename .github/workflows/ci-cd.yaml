@@ -18,6 +18,7 @@ env:
   REGISTRY: docker.io
   BACKEND_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/taskflow-backend
   FRONTEND_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/taskflow-frontend
+  KIND_CLUSTER: taskflow-cluster
 
 jobs:
   # ============================================================
@@ -25,7 +26,7 @@ jobs:
   # ============================================================
   test:
     name: Lint & Test
-    if: ${{ !inputs.skip_tests }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_tests == false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,11 +41,11 @@ jobs:
 
       - name: Backend deps
         working-directory: backend
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Frontend deps
         working-directory: frontend
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Backend tests
         working-directory: backend
@@ -63,10 +64,16 @@ jobs:
     if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     outputs:
-      backend_tag: ${{ steps.meta_backend.outputs.version }}
-      frontend_tag: ${{ steps.meta_frontend.outputs.version }}
+      image_tag: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Require Docker Hub credentials
+        run: |
+          if [ -z "${{ vars.DOCKERHUB_USERNAME }}" ]; then
+            echo "Repository variable DOCKERHUB_USERNAME is not set"
+            exit 1
+          fi
 
       - name: Docker Hub login
         uses: docker/login-action@v3
@@ -75,17 +82,6 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - uses: docker/setup-buildx-action@v3
-
-      - name: Docker metadata (backend)
-        id: meta_backend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.BACKEND_IMAGE }}
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
-          outputs: |
-            version=${{ github.sha }}
 
       - name: Build & push backend
         uses: docker/build-push-action@v6
@@ -110,7 +106,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=frontend
 
   # ============================================================
-  # JOB 3 — Spin up Kind cluster with the full stack
+  # JOB 3 — Kind smoke test (app + optional GitOps/monitoring)
   # ============================================================
   deploy-to-kind:
     name: Kind + ArgoCD + Monitoring
@@ -119,50 +115,90 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- Kind cluster ---
+      - name: Docker Hub login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Create Kind cluster
         uses: helm/kind-action@v1
         with:
-          cluster_name: taskflow-cluster
-          registry: true
-          registry_port: 5001
+          cluster_name: ${{ env.KIND_CLUSTER }}
 
       - name: Verify cluster
         run: |
           kubectl cluster-info
           kubectl get nodes -o wide
 
-      # --- ArgoCD ---
+      - name: Load app images into Kind
+        run: |
+          docker pull "${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
+          docker pull "${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
+          kind load docker-image "${{ env.BACKEND_IMAGE }}:${{ github.sha }}" --name "${{ env.KIND_CLUSTER }}"
+          kind load docker-image "${{ env.FRONTEND_IMAGE }}:${{ github.sha }}" --name "${{ env.KIND_CLUSTER }}"
+
+      - name: Deploy TaskFlow with Kustomize
+        run: |
+          USERNAME="${{ vars.DOCKERHUB_USERNAME }}"
+          TAG="${{ github.sha }}"
+
+          find k8s -type f -name '*.yaml' -exec sed -i "s|DOCKERHUB_USER|${USERNAME}|g" {} +
+          sed -i "s|newTag: .*|newTag: ${TAG}|" k8s/overlays/dev/kustomization.yaml
+          sed -i "s|imagePullPolicy: Always|imagePullPolicy: IfNotPresent|g" k8s/base/*-deployment.yaml
+          # ServiceMonitor CRDs are installed later with kube-prometheus-stack
+          sed -i '/service-monitor.yaml/d' k8s/overlays/dev/kustomization.yaml
+
+          echo "---- rendered overlay ----"
+          kubectl kustomize k8s/overlays/dev | grep -E "image:|kind:"
+
+          kubectl apply -k k8s/overlays/dev
+
+      - name: Wait for TaskFlow to be healthy
+        run: |
+          kubectl wait --for=condition=available --timeout=180s deployment/mongodb -n taskflow
+          kubectl wait --for=condition=available --timeout=300s deployment/taskflow-backend -n taskflow
+          kubectl wait --for=condition=available --timeout=180s deployment/taskflow-frontend -n taskflow
+          kubectl get pods -n taskflow -o wide
+          kubectl get svc -n taskflow
+
+      - name: Smoke test backend API
+        run: |
+          kubectl port-forward -n taskflow svc/taskflow-backend 5000:5000 &
+          PF_PID=$!
+          trap 'kill $PF_PID 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:5000/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+          curl -sf http://127.0.0.1:5000/health
+          echo
+          curl -sf http://127.0.0.1:5000/metrics | head -20
+          echo
+          curl -sf -X POST http://127.0.0.1:5000/api/tasks \
+            -H "Content-Type: application/json" \
+            -d '{"title":"Smoke test task"}'
+          echo
+          curl -sf http://127.0.0.1:5000/api/tasks
+          echo
+
       - name: Install ArgoCD
         run: |
           kubectl create namespace argocd
           kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
           kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
 
-      - name: Install ArgoCD CLI
-        run: |
-          curl -sSL -o /usr/local/bin/argocd \
-            https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          chmod +x /usr/local/bin/argocd
-
       - name: Register TaskFlow app in ArgoCD
         run: |
-          # Patch the Application manifest with this repo URL and image tags
           sed -i "s|YOUR_GITHUB_USER/taskflow|${{ github.repository }}|g" argocd/application.yaml
-          sed -i "s|YOUR_GITHUB_USER|${{ vars.DOCKERHUB_USERNAME }}|g" argocd/application.yaml argocd/project.yaml
-          sed -i "s|DOCKERHUB_USER|${{ vars.DOCKERHUB_USERNAME }}|g" k8s/overlays/dev/kustomization.yaml
-
-          # Apply k8s manifests directly so namespace taskflow and deployments exist immediately
-          kubectl apply -k k8s/overlays/dev
-
           kubectl apply -f argocd/project.yaml
           kubectl apply -f argocd/application.yaml
-
-          echo "Waiting for ArgoCD to sync the app..."
-          sleep 20
           kubectl get applications -n argocd
 
-      # --- Prometheus + Grafana ---
       - name: Install kube-prometheus-stack
         run: |
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -179,24 +215,7 @@ jobs:
             --set prometheus.prometheusSpec.resources.requests.memory=256Mi \
             --set prometheus.prometheusSpec.resources.limits.memory=1Gi \
             --wait --timeout=10m
-
-      - name: Wait for TaskFlow to be healthy
-        run: |
-          kubectl wait --for=condition=available --timeout=300s deployment/taskflow-backend -n taskflow
-          kubectl wait --for=condition=available --timeout=300s deployment/taskflow-frontend -n taskflow
-          kubectl get pods -n taskflow
-          kubectl get svc -n taskflow
-
-      - name: Smoke test backend API
-        run: |
-          kubectl port-forward -n taskflow svc/taskflow-backend 5000:5000 &
-          sleep 5
-          curl -f http://localhost:5000/health
-          curl -f http://localhost:5000/metrics | head -20
-          curl -X POST http://localhost:5000/api/tasks \
-            -H "Content-Type: application/json" \
-            -d '{"title":"Smoke test task"}'
-          curl -f http://localhost:5000/api/tasks
+          kubectl apply -f k8s/overlays/dev/service-monitor.yaml
 
       - name: Dump diagnostics
         if: always()
@@ -207,7 +226,9 @@ jobs:
           kubectl get pods -A || true
           echo "=== TaskFlow Events ==="
           kubectl get events -n taskflow --sort-by=.lastTimestamp || true
+          echo "=== Backend describe ==="
+          kubectl describe deployment taskflow-backend -n taskflow || true
 
       - name: Delete Kind cluster
         if: always()
-        run: kind delete cluster --name taskflow-cluster
+        run: kind delete cluster --name "${{ env.KIND_CLUSTER }}"

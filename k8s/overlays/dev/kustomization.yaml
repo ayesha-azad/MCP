@@ -5,6 +5,7 @@ namespace: taskflow
 
 resources:
   - ../../base
+  - service-monitor.yaml
 
 images:
   - name: DOCKERHUB_USER/taskflow-backend
