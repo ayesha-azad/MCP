@@ -15,6 +15,7 @@ resources:
   - frontend-service.yaml
   - service-monitor.yaml
 
-commonLabels:
-  app.kubernetes.io/part-of: taskflow
-  app.kubernetes.io/managed-by: argocd
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: taskflow
+      app.kubernetes.io/managed-by: argocd
