@@ -46,7 +46,7 @@ export default function App() {
       <header>
         <h1>📋 TaskFlow</h1>
         <p className="subtitle">
-          A MERN stack demo for CI/CD testing by Ayesha Azad
+          A MERN stack demo for CI/CD testing by Ayesha Azad with love &#128151;
         </p>
       </header>
 
